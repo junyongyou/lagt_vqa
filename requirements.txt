@@ -1,0 +1,13 @@
+h5py==3.1.0
+imgaug==0.4.0
+matplotlib==3.5.0
+numpy==1.19.5
+opencv-python==4.5.4.60
+pillow==8.4.0
+python==3.7.1
+scikit-image==0.18.3
+scikit-learn==1.0.1
+scipy==1.7.3
+tensorflow-addons==0.15.0
+tensorflow-estimator==2.5.0
+tensorflow==2.5.1
