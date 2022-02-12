@@ -29,20 +29,17 @@ In principle, the following parameters can be defined:
     
     args['model_name'] = 'lagt' # model name to be used in recording training result (e.g., logs) 
     
-    args['transformer_params'] = [2, 32, 4, 64]
+    args['transformer_params'] = [2, 64, 8, 256]
     args['dropout_rate'] = 0.1
 
     args['clip_length'] = 32  # Define the length of a clip
     
-    args['lr_base'] = 1e-3  # Define the back learning rate in warmup and rate decay approach
+    args['lr_base'] = 1e-3/2  # Define the back learning rate in warmup and rate decay approach
     args['batch_size'] = 32 # Batch size, should choose to fit in the GPU memory
-    args['epochs'] = 100  # Maximal epoch number, can set early stop in the callback or not
+    args['epochs'] = 300  # Maximal epoch number, can set early stop in the callback or not
     args['lr_schedule'] = True  # Choose between True and False, indicating if learning rate schedule should be used or not
  
-    args['validation'] = 'validation' # Choose between 'validation' and 'test'. If 'validation', the model will be trained on train set and validated on test set, which are randomly split from the databases. 
-                                      # If 'test', the model will be trained on entire 'KonViD-1k' and 'YouTube-UGC' databases, and validated on the entire 'LIVE-VQC' database
-
-    args['do_finetune'] = False # specify if finetune using SGD with smaller learning rate is performed
+    args['do_finetune'] = True # specify if finetune using SGD with smaller learning rate is performed
 
 ## Predict video quality using the trained model
 After LAGT has been trained, and the weights have been stored in h5 file, it can be used to predict video quality with arbitrary resolutions.
