@@ -22,11 +22,9 @@ if __name__ == '__main__':
 
     args['model_name'] = 'lagt'
 
-    args['transformer_params'] = [2, 64, 4, 64]
+    args['transformer_params'] = [2, 64, 8, 256]
     args['dropout_rate'] = 0.1
-    args['cnn_filters'] = [32, 64]
-    # args['pooling_sizes'] = [4, 4]
-    args['clip_length'] = 16
+    args['clip_length'] = 32
 
     args['batch_size'] = 32
 

@@ -130,11 +130,14 @@ class VideoClipFeatureGenerator(Sequence):
             random_choice = np.random.choice(indices_batch, int(self.random_ratio * self.batch_size))
         for index in indices_batch:
             frame_features = np.load(self.features_files[index])
-            frame_features = np.squeeze(frame_features, axis=2)
+            frame_features = np.squeeze(frame_features)
 
             # Reverse frames
             if self.training and index in random_choice:
-                frame_features = frame_features[::-1, :, :]
+                if len(frame_features.shape) > 2:
+                    frame_features = frame_features[::-1, :, :]
+                else:
+                    frame_features = frame_features[::-1, :]
 
             if len(frame_features.shape) > 2:
                 frame_features = np.reshape(frame_features,

@@ -28,7 +28,7 @@ def check_args(args):
         args['validation'] = 'validation'
 
     if 'transformer_params' not in args:
-        args['transformer_params'] = [2, 64, 4, 64]
+        args['transformer_params'] = [2, 64, 8, 256]
     if 'dropout_rate' not in args:
         args['dropout_rate'] = 0.1
 
@@ -294,7 +294,7 @@ if __name__ == '__main__':
 
     args['model_name'] = 'lagt'
 
-    args['transformer_params'] = [2, 64, 4, 64]
+    args['transformer_params'] = [2, 64, 8, 256]
     args['dropout_rate'] = 0.1
     args['cnn_filters'] = [32, 64]
     # args['pooling_sizes'] = [4, 4]

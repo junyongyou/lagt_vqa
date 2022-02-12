@@ -1,5 +1,5 @@
 """
-Run the training of Transformer-PHIQNet, i.e., applying Transformer on frame features without using the 1D CNN
+Run the training of Transformer-PHIQNet, i.e., applying Transformer on frame features without using the shared local MHA
 As the model has much more parameters than LAGT-PHIQNet, the batch size must be reduced to avoid OOM error.
 """
 import os
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     transformer_params_range = [
         [2, 32, 4, 64],
-        [2, 64, 4, 64],
+        [2, 64, 8, 256],
         [4, 32, 4, 64],
         [4, 64, 4, 64],
         [4, 64, 4, 128],

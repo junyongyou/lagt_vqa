@@ -1,10 +1,9 @@
 import os
 import tensorflow as tf
 import numpy as np
+import scipy
 import glob
 from tensorflow.keras.optimizers import Adam, SGD
-
-from tensorflow.keras.layers import Input
 
 from callbacks.callbacks import create_callbacks
 from callbacks.warmup_cosine_decay_scheduler import WarmUpCosineDecayScheduler
@@ -30,35 +29,14 @@ def check_args(args):
         args['ugc_chunk_folder_flipped'] = None
     if 'database' not in args:
         args['database'] = ['live', 'konvid', 'ugc']
-    if 'validation' not in args:
-        args['validation'] = 'validation'
 
     if 'transformer_params' not in args:
-        args['transformer_params'] = [2, 64, 4, 64]
+        args['transformer_params'] = [2, 64, 8, 256]
     if 'dropout_rate' not in args:
         args['dropout_rate'] = 0.1
 
-    if 'cnn_filters' not in args:
-        args['cnn_filters'] = [32, 64]
-    if 'pooling_sizes' not in args:
-        if len(args['cnn_filters']) == 2:
-            args['pooling_sizes'] = [4, 4]
-        elif len(args['cnn_filters']) == 3:
-            args['pooling_sizes'] = [4, 2, 2]
-        else:
-            args['pooling_sizes'] = [2, 2, 2, 2]
-    else:
-        if len(args['cnn_filters']) != len(args['pooling_sizes']):
-            print('WARN: Filters and pooling sizes in 1D CNN must be match, pooling sizes changed based on filters')
-            if len(args['cnn_filters']) == 2:
-                args['pooling_sizes'] = [4, 4]
-            elif len(args['cnn_filters']) == 3:
-                args['pooling_sizes'] = [4, 2, 2]
-            else:
-                args['pooling_sizes'] = [2, 2, 2, 2]
-
     if 'clip_length' not in args:
-        args['clip_length'] = 16
+        args['clip_length'] = 32
 
     if 'epochs' not in args:
         args['epochs'] = 400
@@ -102,7 +80,23 @@ def remove_non_best_weights(result_folder, best_weights_files):
             os.remove(all_weights_file)
 
 
-def train_main(args, train_vids=None, test_vids=None):
+def evaluation_on_testset(model, vq_generator):
+    predictions = []
+    mos_scores = []
+
+    for i in range(vq_generator.__len__()):
+        features, score = vq_generator.__getitem__(i)
+        mos_scores.extend(score)
+        prediction = model(features)
+        predictions.extend(np.squeeze(prediction, 1))
+
+    PLCC = scipy.stats.pearsonr(mos_scores, predictions)[0]
+    SROCC = scipy.stats.spearmanr(mos_scores, predictions)[0]
+    RMSE = np.sqrt(np.mean(np.subtract(predictions, mos_scores) ** 2))
+    MAD = np.mean(np.abs(np.subtract(predictions, mos_scores)))
+    return PLCC, SROCC, RMSE, MAD
+
+def train_main(args, train_vids=None, val_ids=None, test_ids=None):
     """
     Main function to train LAGT-PHIQNet
     :param args: arguments for training
@@ -120,9 +114,9 @@ def train_main(args, train_vids=None, test_vids=None):
 
     model_name = args['model_name']
 
-    if train_vids == None or test_vids == None:
-        # train and test videos will be randomly split based on random seed
-        train_vids, test_vids = gather_all_vids(all_vids_pkl=args['vids_meta'])
+    if train_vids == None or val_ids == None:
+        # train and val videos will be randomly split based on random seed
+        train_vids, val_ids = gather_all_vids(all_vids_pkl=args['vids_meta'])
 
     clip_length = args['clip_length']
     model_name += '_clip_{}'.format(clip_length)
@@ -132,100 +126,63 @@ def train_main(args, train_vids=None, test_vids=None):
     # Model parameters
     transformer_params = args['transformer_params']
     dropout_rates = args['dropout_rate']
-    cnn_filters = args['cnn_filters']
-    pooling_sizes = args['pooling_sizes']
 
-    # feature_length = 1024
     feature_length = 1280
-    # feature_length = 2048
-    # feature_length = 512
 
     if args['multi_gpu'] == 0:
         gpus = tf.config.experimental.list_physical_devices('GPU')
         tf.config.experimental.set_visible_devices(gpus[args['gpu']], 'GPU')
-        # tf.config.experimental_run_functions_eagerly(True)
         model = create_model(clip_length,
                              feature_length=feature_length,
-                             cnn_filters=cnn_filters,
-                             pooling_sizes=pooling_sizes,
                              transformer_params=transformer_params,
                              dropout_rate=dropout_rates)
-        # model = create_model(feature_length=feature_length,
-        #                      transformer_params=transformer_params,
-        #                      dropout_rate=dropout_rates)
     else:
         strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.HierarchicalCopyAllReduce())
         with strategy.scope():
             model = create_model(clip_length,
                                  feature_length=feature_length,
-                                 cnn_filters=cnn_filters,
-                                 pooling_sizes=pooling_sizes,
                                  transformer_params=transformer_params,
                                  dropout_rate=dropout_rates)
-            # model = create_model(feature_length=feature_length,
-            #                      transformer_params=transformer_params,
-            #                      dropout_rate=dropout_rates)
-    model.build(input_shape=(None, 32, 1280))
     model.summary()
 
     optimizer = Adam(args['lr_base'])
     loss = 'mse'
     metrics = 'mae'
     model.compile(loss=loss, optimizer=optimizer, metrics=[metrics])
-    model.run_eagerly = True
+    # model.run_eagerly = True
 
-    # load pretrained
-    # model.load_weights(r'C:\vq_datasets\results\4_0.2683_0.4129.h5')
+    train_generator = VideoClipFeatureGenerator(args['meta_file'],
+                                                train_vids,
+                                                batch_size=args['batch_size'],
+                                                clip_length=args['clip_length'],
+                                                random_ratio=0.25,
+                                                training=True,
+                                                ugc_chunk_pickle=args['ugc_chunk_pickle'],
+                                                ugc_chunk_folder=args['ugc_chunk_folder'],
+                                                ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
+                                                database=args['database'])
+    val_generator = VideoClipFeatureGenerator(args['meta_file'],
+                                               val_ids,
+                                               batch_size=args['batch_size'],
+                                               clip_length=args['clip_length'],
+                                               random_ratio=0,
+                                               training=False,
+                                               ugc_chunk_pickle=args['ugc_chunk_pickle'],
+                                               ugc_chunk_folder=args['ugc_chunk_folder'],
+                                               ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
+                                               database=args['database'])
+    test_generator = VideoClipFeatureGenerator(args['meta_file'],
+                                              test_ids,
+                                              batch_size=1,
+                                              clip_length=args['clip_length'],
+                                              random_ratio=0,
+                                              training=False,
+                                              ugc_chunk_pickle=args['ugc_chunk_pickle'],
+                                              ugc_chunk_folder=args['ugc_chunk_folder'],
+                                              ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
+                                              database=args['database'])
 
-    if args['validation'] == 'validation':
-        train_generator = VideoClipFeatureGenerator(args['meta_file'],
-                                                    train_vids,
-                                                    batch_size=args['batch_size'],
-                                                    clip_length=args['clip_length'],
-                                                    random_ratio=0.25,
-                                                    training=True,
-                                                    # clip_or_frame='frame',
-                                                    ugc_chunk_pickle=args['ugc_chunk_pickle'],
-                                                    ugc_chunk_folder=args['ugc_chunk_folder'],
-                                                    ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
-                                                    database=args['database'])
-        test_generator = VideoClipFeatureGenerator(args['meta_file'],
-                                                   test_vids,
-                                                   batch_size=args['batch_size'],
-                                                   clip_length=args['clip_length'],
-                                                   random_ratio=0.25,
-                                                   training=False,
-                                                   # clip_or_frame='frame',
-                                                   ugc_chunk_pickle=args['ugc_chunk_pickle'],
-                                                   ugc_chunk_folder=args['ugc_chunk_folder'],
-                                                   ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
-                                                   database=args['database'])
-    else:
-        all_vids = train_vids + test_vids
-        train_generator = VideoClipFeatureGenerator(args['meta_file'],
-                                                    all_vids,
-                                                    batch_size=args['batch_size'],
-                                                    clip_length=args['clip_length'],
-                                                    random_ratio=0.25,
-                                                    training=True,
-                                                    # clip_or_frame='frame',
-                                                    ugc_chunk_pickle=args['ugc_chunk_pickle'],
-                                                    ugc_chunk_folder=args['ugc_chunk_folder'],
-                                                    ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
-                                                    database=['konvid', 'ugc'])
-        test_generator = VideoClipFeatureGenerator(args['meta_file'],
-                                                   all_vids,
-                                                   batch_size=args['batch_size'],
-                                                   clip_length=args['clip_length'],
-                                                   random_ratio=0.25,
-                                                   training=False,
-                                                   # clip_or_frame='frame',
-                                                   ugc_chunk_pickle=args['ugc_chunk_pickle'],
-                                                   ugc_chunk_folder=args['ugc_chunk_folder'],
-                                                   ugc_chunk_folder_flipped=args['ugc_chunk_folder_flipped'],
-                                                   database=['live'])
-
-    evaluation_callback = ModelEvaluationGeneratorVQ(test_generator, None)
+    evaluation_callback = ModelEvaluationGeneratorVQ(val_generator, None)
     callbacks = create_callbacks(model_name,
                                  result_folder,
                                  evaluation_callback,
@@ -251,8 +208,8 @@ def train_main(args, train_vids=None, test_vids=None):
         x=train_generator,
         epochs=epochs,
         steps_per_epoch=train_steps,
-        validation_data=test_generator,
-        validation_steps=test_generator.__len__(),
+        validation_data=val_generator,
+        validation_steps=val_generator.__len__(),
         verbose=1,
         shuffle=False,
         callbacks=callbacks,
@@ -273,7 +230,7 @@ def train_main(args, train_vids=None, test_vids=None):
     if args['do_finetune'] and best_weights_file:
         del (callbacks[-1])
         model.load_weights(best_weights_file)
-        finetune_lr = 1e-4/2
+        finetune_lr = 1e-5
         if args['lr_schedule']:
             warmup_lr_finetune = WarmUpCosineDecayScheduler(learning_rate_base=finetune_lr,
                                                             total_steps=total_train_steps,
@@ -289,8 +246,8 @@ def train_main(args, train_vids=None, test_vids=None):
             x=train_generator,
             epochs=epochs,
             steps_per_epoch=train_steps,
-            validation_data=test_generator,
-            validation_steps=test_generator.__len__(),
+            validation_data=val_generator,
+            validation_steps=val_generator.__len__(),
             verbose=1,
             shuffle=False,
             callbacks=callbacks,
@@ -301,6 +258,17 @@ def train_main(args, train_vids=None, test_vids=None):
                                                              max_plcc_finetune)
         rf.write(info)
         print(info)
+
+        best_weights_file_finetune = identify_best_weights(result_folder, finetune_model_history.history, callbacks[3].best)
+
+    if args['do_finetune']:
+        best_weights = best_weights_file_finetune if best_weights_file_finetune is not None else best_weights_file
+    else:
+        best_weights = best_weights_file
+    model.load_weights(best_weights)
+    plcc, srocc, rmse, mad = evaluation_on_testset(model, test_generator)
+    rf.write('Results on testset: PLCC: {}, SROCC: {}, RMSE: {}, MAD: {}\n'.format(plcc, srocc, rmse, mad))
+
     rf.flush()
     rf.close()
 

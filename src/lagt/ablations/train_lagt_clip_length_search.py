@@ -19,16 +19,10 @@ if __name__ == '__main__':
     args['database'] = ['live', 'konvid', 'ugc']
     # args['database'] = ['konvid']
 
-    args['transformer_params'] = [2, 64, 4, 64]
+    args['transformer_params'] = [2, 64, 8, 256]
     args['dropout_rate'] = 0.1
-    args['cnn_filters'] = [32, 64]
 
-    clip_length_range = [8, 16, 24, 32, 64]
-    pooling_sizes_range = [[4, 2],
-                          [4, 4],
-                          [6, 4],
-                          [8, 4],
-                          [8, 8]]
+    clip_length_range = [8, 16, 24, 32, 64, 128, 256]
 
     args['batch_size'] = 32
     args['lr_base'] = 1e-3
@@ -41,8 +35,7 @@ if __name__ == '__main__':
 
     args['do_finetune'] = False
 
-    for clip_length, pooling_sizes in zip(clip_length_range, pooling_sizes_range):
+    for clip_length in clip_length_range:
         print('Clip length: {}'.format(clip_length))
         args['clip_length'] = clip_length
-        args['pooling_sizes'] = pooling_sizes
         train_main(args)

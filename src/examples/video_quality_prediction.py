@@ -19,7 +19,7 @@ def predict_video_quality(phinqnet_weights_path, lagt_weights_path, video_path):
         clip_features.append(features[j * clip_length: (j + 1) * clip_length, :])
     clip_features = np.array(clip_features)
 
-    transformer_params = [2, 64, 4, 64]
+    transformer_params = [2, 64, 8, 256]
     dropout_rates = 0.1
     cnn_filters = [32, 64]
 
@@ -27,7 +27,6 @@ def predict_video_quality(phinqnet_weights_path, lagt_weights_path, video_path):
 
     vq_model = create_model(clip_length,
                             feature_length=feature_length,
-                            cnn_filters=cnn_filters,
                             transformer_params=transformer_params,
                             dropout_rate=dropout_rates)
     vq_model.summary()

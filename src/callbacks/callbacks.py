@@ -22,7 +22,7 @@ def create_callbacks(model_name, result_folder, other_callback=None, checkpoint=
     csv_logger = MyCSVLogger(csv_log_file, append=True, separator=';')
     callbacks.append(csv_logger)
     if early_stop:
-        callbacks.append(EarlyStopping(monitor='plcc', min_delta=0.001, patience=40, mode='max'))
+        callbacks.append(EarlyStopping(monitor='plcc', min_delta=0.001, patience=50, mode='max'))
     if checkpoint:
         if metrics == None:
             mcp_file = os.path.join(result_folder, '{epoch:01d}_{loss:.4f}_{val_loss:.4f}.h5')
