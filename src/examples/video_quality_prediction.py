@@ -21,7 +21,6 @@ def predict_video_quality(phinqnet_weights_path, lagt_weights_path, video_path):
 
     transformer_params = [2, 64, 8, 256]
     dropout_rates = 0.1
-    cnn_filters = [32, 64]
 
     feature_length = 5 * 256
 
