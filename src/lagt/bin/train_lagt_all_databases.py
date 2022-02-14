@@ -26,10 +26,10 @@ if __name__ == '__main__':
     args['result_folder'] = r'C:\vq_datasets\results\lagt_konviq_swin'
     args['dropout_rate'] = 0.1
 
-    args['batch_size'] = 32
+    args['batch_size'] = 64
     args['clip_length'] = 32
 
-    args['lr_base'] = 1e-3/2
+    args['lr_base'] = 1e-3
     args['epochs'] = 300
 
     args['multi_gpu'] = 0
