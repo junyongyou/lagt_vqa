@@ -152,6 +152,11 @@ class VideoClipFeatureGenerator(Sequence):
         if self.clip_or_frame == 'frame':
             return np.array(frame_features_data), np.array(y_scores)
 
+        if frame_features_data.shape[1] < self.clip_length:
+            padded_data = np.zeros((frame_features_data.shape[0], self.clip_length, frame_features_data.shape[-1]))
+            padded_data[:, :frame_features_data.shape[1], :] = frame_features_data
+            frame_features_data = padded_data
+
         clip_features_data = []
         for i in range(frame_features_data.shape[0]):
             clip_features = []
